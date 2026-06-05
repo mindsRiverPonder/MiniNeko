@@ -2,11 +2,13 @@
 
 [English](README.md) | **中文**
 
-本项目演示了 MiniCPM-V 系列多模态模型在 iOS、Android 与 HarmonyOS NEXT 设备上的端侧本地推理。当前已支持以下三个模型版本：
+本项目演示了 MiniCPM-V 系列多模态模型在 iOS、Android 与 HarmonyOS NEXT 设备上的端侧本地推理。当前已支持：
 
 * **MiniCPM-V 2.6**
 * **MiniCPM-V 4.0**
 * **MiniCPM-V 4.6**
+* **MiniCPM5-1B**（纯文本）
+* **VoxCPM2**（语音合成 TTS）
 
 仓库中包含三份基于 `llama.cpp` 完整本地推理的 demo：
 
@@ -36,7 +38,7 @@
 README 分为两大部分：
 
 * **第一部分 — 平台安装与构建**：iOS / Android / HarmonyOS 三端如何编译运行。
-* **第二部分 — GGUF 模型文件**：三个 MiniCPM-V 版本的模型权重下载方式，以及对应的最小端侧硬件要求。
+* **第二部分 — GGUF 模型文件**：支持的模型权重下载方式，以及对应的最小端侧硬件要求。
 
 ---
 
@@ -160,10 +162,14 @@ cd MiniCPM-V-demo-Android
 | MiniCPM-V 2.6 | 8B | Q4_K_M | ~4.4 GB | ~1.0 GB | ~5.4 GB | **≥ 8 GB** |
 | MiniCPM-V 4.0 | 4.1B | Q4_K_M | ~2.0 GB | ~0.9 GB | ~2.9 GB | **≥ 6 GB** |
 | MiniCPM-V 4.6 | 1.3B | Q4_K_M | ~0.5 GB | ~1.1 GB | ~1.6 GB | **≥ 6 GB** |
+| MiniCPM5-1B | 1B | Q4_K_M | ~0.5 GB | — | ~0.5 GB | **≥ 4 GB** |
+| VoxCPM2 (TTS) | ~2B | Q4_K_M + F16 | ~1.0 GB | — | ~2.8 GB | **≥ 6 GB** |
 
 补充说明：
 
 * `mmproj` 是视觉投影器 + ViT 权重，统一保留 **f16** 精度——视觉塔做低比特量化对感知质量的伤害比 LLM 更明显。
+* MiniCPM5-1B 为纯文本模型，不需要 `mmproj` 文件。
+* VoxCPM2 需要两个 GGUF 文件（BaseLM + Acoustic），同样不需要 `mmproj`——它是一个纯语音合成模型。
 * 三端 demo 默认上下文长度为 4K token。上下文越长，KV cache 占用近似线性增长，临界设备上可能需要相应调小。
 * Android / HarmonyOS 上跑 V 2.6 强烈建议 8 GB 及以上内存。iOS 上 V 2.6 已在 iPhone 15 Pro / 16 系列以及搭载 M 系列芯片的较新 iPad 上验证；早期 6 GB 内存设备容易出现频繁换页。
 
@@ -202,3 +208,18 @@ cd MiniCPM-V-demo-Android
 * ModelScope: [https://modelscope.cn/models/OpenBMB/MiniCPM5-1B-GGUF](https://modelscope.cn/models/OpenBMB/MiniCPM5-1B-GGUF)
 
 请从仓库下载语言模型文件（例如 `MiniCPM5-1B-Q4_K_M.gguf`）。MiniCPM5 为纯文本模型，不需要 `mmproj`。
+
+### 2.5 VoxCPM2 GGUF 模型文件（语音合成）
+
+VoxCPM2 是约 2B 参数的语音合成模型，由两个 GGUF 文件组成：
+
+- **BaseLM**（`VoxCPM2-BaseLM-Q4_K_M.gguf`，约 956 MB）—— 基于 MiniCPM-4 的语言模型
+- **Acoustic**（`VoxCPM2-Acoustic-F16.gguf`，约 1.74 GB）—— 声学解码器（FSQ + LocEnc + LocDiT + AudioVAE 等）
+
+VoxCPM2 支持 30+ 种语言和 9 种中国方言。可直接从文本生成语音（语音设计模式），也可通过参考音频进行声音克隆。
+
+#### 下载 GGUF 模型文件
+
+* HuggingFace: [https://huggingface.co/tc-mb/MiniCPM-V-Apps-gguf](https://huggingface.co/tc-mb/MiniCPM-V-Apps-gguf)
+
+下载后将两个 `.gguf` 文件放入 App 的 **Documents** 目录（iOS），或放入 `/models/{model_id}/` 目录（Android / HarmonyOS）。也可以在 App 内的 **模型管理** 页面直接下载。下载完成后选择 VoxCPM2 模型，App 将自动切换至语音合成界面。

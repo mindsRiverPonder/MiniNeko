@@ -2,11 +2,13 @@
 
 **English** | [中文](README_zh.md)
 
-This demo runs the MiniCPM-V family of multimodal models fully on-device on iOS, Android, and HarmonyOS NEXT. Three model versions are currently supported:
+This demo runs the MiniCPM-V family of multimodal models fully on-device on iOS, Android, and HarmonyOS NEXT. Currently supported:
 
 * **MiniCPM-V 2.6**
 * **MiniCPM-V 4.0**
 * **MiniCPM-V 4.6**
+* **MiniCPM5-1B** (text-only)
+* **VoxCPM2** (text-to-speech, TTS)
 
 This repository contains three on-device demos for MiniCPM-V (multimodal LLM) running fully locally via `llama.cpp`:
 
@@ -160,10 +162,14 @@ The on-device memory needed to run a model is roughly *(model file size) + KV ca
 | MiniCPM-V 2.6 | 8B | Q4_K_M | ~4.4 GB | ~1.0 GB | ~5.4 GB | **≥ 8 GB** |
 | MiniCPM-V 4.0 | 4.1B | Q4_K_M | ~2.0 GB | ~0.9 GB | ~2.9 GB | **≥ 6 GB** |
 | MiniCPM-V 4.6 | 1.3B | Q4_K_M | ~0.5 GB | ~1.1 GB | ~1.6 GB | **≥ 6 GB** |
+| MiniCPM5-1B | 1B | Q4_K_M | ~0.5 GB | — | ~0.5 GB | **≥ 4 GB** |
+| VoxCPM2 (TTS) | ~2B | Q4_K_M + F16 | ~1.0 GB | — | ~2.8 GB | **≥ 6 GB** |
 
 Notes:
 
 * `mmproj` is the vision projector + ViT weights; it is shipped in **f16** because quantising the visual tower hurts perception quality noticeably more than quantising the LLM.
+* MiniCPM5-1B is a text-only model and does not need an `mmproj` file.
+* VoxCPM2 requires two GGUF files (BaseLM + Acoustic) and does not use an `mmproj` either — it is a pure TTS model.
 * All three demos default to a context window of 4K tokens. Larger contexts will increase the KV-cache footprint roughly linearly, so on a borderline device you may need to lower it.
 * On Android / HarmonyOS, devices with 8 GB+ RAM are strongly recommended for V 2.6. On iOS, V 2.6 has been validated on iPhone 15 Pro / 16 series and recent iPads with M-series chips; older 6 GB devices may swap heavily.
 
@@ -202,3 +208,18 @@ Download the language model file (e.g., `MiniCPM-V-4_6-Q4_K_M.gguf`) and the vis
 * ModelScope: [https://modelscope.cn/models/OpenBMB/MiniCPM5-1B-GGUF](https://modelscope.cn/models/OpenBMB/MiniCPM5-1B-GGUF)
 
 Download the language model file (e.g., `MiniCPM5-1B-Q4_K_M.gguf`) from the repository. MiniCPM5 is text-only, so no `mmproj` is required.
+
+### 2.5 VoxCPM2 GGUF Files (text-to-speech)
+
+VoxCPM2 is a ~2B-parameter text-to-speech model. It consists of two GGUF files:
+
+- **BaseLM** (`VoxCPM2-BaseLM-Q4_K_M.gguf`, ~956 MB) — the MiniCPM-4 based language model
+- **Acoustic** (`VoxCPM2-Acoustic-F16.gguf`, ~1.74 GB) — the acoustic decoder (FSQ + LocEnc + LocDiT + AudioVAE)
+
+VoxCPM2 supports 30+ languages and 9 Chinese dialects. It can generate speech from text directly (voice-design mode) or clone a voice from a reference audio clip.
+
+#### Download Official GGUF Files
+
+* HuggingFace: [https://huggingface.co/tc-mb/MiniCPM-V-Apps-gguf](https://huggingface.co/tc-mb/MiniCPM-V-Apps-gguf)
+
+After downloading, place both `.gguf` files in the app's **Documents** directory (iOS) or in the per-model folder under `{ExternalFilesDir}/models/` (Android / HarmonyOS). You can also download them directly inside the app via **Model Manager**. Once models are downloaded, select VoxCPM2 and the app switches to the TTS interface automatically.
