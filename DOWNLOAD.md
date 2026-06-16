@@ -90,8 +90,6 @@ All packages target **64-bit ARM** (`arm64-v8a`).
 
 3. Open the installed app and tap **Download** in the in-app **Model Manager** to fetch the model files.
 
-> **NOTE:** The HarmonyOS distribution channel inside Huawei AppGallery is being prepared; for now please use the HAP package above.
-
 
 ## Notes
 

@@ -140,7 +140,7 @@ MiniCPM-V-demo-HarmonyOS/
 
 * 把 `GGML_OPENMP` 打开（在 `entry/build-profile.json5` 改 `-DGGML_OPENMP=ON`），需要确认 ohos-ndk 的 OpenMP 运行时。
 * 升级 KleidiAI 指令集到 `armv8.6-a+dotprod+i8mm+fp16+bf16`（与 Android 端一致）。当前 demo 默认 `armv8.2-a+dotprod+fp16` 以最大化兼容。
-* 加华为应用市场上架所需的隐私清单（`AppScope/resources/base/profile/privacy.json`）。
+
 * 加深色模式资源 `resources/dark/`。
 
 ---
