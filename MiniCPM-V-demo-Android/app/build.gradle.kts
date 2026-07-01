@@ -119,12 +119,12 @@ dependencies {
 }
 
 // ---------------------------------------------------------------------------
-// Dynamic CPU dispatch: build an additional libggml-cpu.so optimised for
-// ARMv8.6-a (i8mm + bf16) and package it alongside the baseline build.
-// At runtime the Kotlin CpuFeatures helper detects hardware capabilities
-// and pre-loads the best variant before the rest of the native chain.
+// Optional dynamic CPU dispatch: build an additional libggml-cpu.so optimised
+// for ARMv8.6-a (i8mm + bf16) and package it alongside the baseline build.
+// Enable with -PenableV86Cpu=true; baseline ARM64 is the default.
 // ---------------------------------------------------------------------------
 
+if (providers.gradleProperty("enableV86Cpu").map { it.equals("true", ignoreCase = true) }.orElse(false).get()) {
 fun runCmd(vararg args: String) {
     val proc = ProcessBuilder(*args).inheritIO().start()
     val rc = proc.waitFor()
@@ -185,4 +185,5 @@ afterEvaluate {
     listOf("Debug", "Release").forEach { buildType ->
         tasks.findByName("merge${buildType}JniLibFolders")?.dependsOn("buildGgmlCpu_v86")
     }
+}
 }

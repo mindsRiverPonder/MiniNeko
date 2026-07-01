@@ -1,11 +1,40 @@
 <resources>
+    <string name="quick_model_switch_title">Downloaded Models</string>
+    <string name="quick_model_switch_empty">No downloaded chat model was found yet. Please download one in Model Management.</string>
+    <string name="quick_model_switch_hint">Tap a ready model to switch without digging through settings.</string>
+    <string name="quick_model_current_format">%1$s (current)</string>
+    <string name="quick_model_already_loaded">%1$s is already loaded</string>
+    <string name="quick_model_icon_text">T</string>
+    <string name="quick_model_icon_vision">V</string>
+    <string name="quick_model_loaded_badge">Loaded</string>
+    <string name="quick_model_ready_badge">Ready</string>
+    <string name="take_photo">Take photo</string>
+    <string name="captured_photo_name">Camera photo</string>
+    <string name="toast_camera_cancelled">Photo cancelled</string>
+    <string name="toast_camera_permission_denied">Camera permission denied</string>
+    <string name="toast_wait_image_prefill">Analyzing the image, meow~ please send it in a moment</string>
+    <string name="vision_settings">Vision Settings</string>
+    <string name="vision_compression_settings">Image Compression Size</string>
+    <string name="vision_compression_value">Long side %1$d px</string>
+    <string name="vision_compression_original">Use original image, no compression</string>
+    <string name="vision_compression_original_value">Original</string>
+    <string name="vision_compression_hint">Original image is used by default for paper screenshots and tables. Turn it off to set a compressed long-side limit; larger values keep more detail but are slower and use more memory.</string>
+    <string name="vision_compression_saved">Image long-side limit set to %1$d px</string>
+    <string name="vision_compression_saved_original">Original image mode enabled</string>
+    <string name="switch_anyway">Switch Anyway</string>
+    <string name="keep_vision_model">Keep Vision</string>
+    <string name="vision_to_text_warning_title">Switch to text model?</string>
+    <string name="vision_to_text_warning_message">This will lose image information. Text models cannot see pictures, meow~</string>
+    <string name="neko_kitten_warning_image">Pouting kitten catgirl warning image</string>
     <!-- Keys not listed here fall back to values/strings.xml (Chinese default).
-         Brand names (app_name, app_title, welcome_title, etc.), preset English
+         Brand names (app_name, app_title, etc.), preset English
          prompts (suggestion_2, suggestion_2_text, disclaimer), and other strings
          that are already English are intentionally omitted. -->
 
     <string name="welcome_desc">I can help you learn, get inspired, and work faster — and I can also understand images for you.</string>
     <string name="welcome_desc_text">I can help you learn, get inspired, and work faster — ask me anything.</string>
+    <string name="welcome_title">Welcome back, master</string>
+    <string name="welcome_title_text">Welcome back, master</string>
     <string name="suggestion_1">What\'s in this photo?</string>
     <string name="suggestion_1_text">Write a poem on spring.</string>
     <string name="model_management">Model Management</string>
@@ -33,7 +62,7 @@
     <string name="image_slice_dialog_title">Image Slices</string>
     <string name="image_slice_label_min">1\nFastest</string>
     <string name="image_slice_label_max">9\nSharpest</string>
-    <string name="image_slice_hint">More slices = sharper detail but more image tokens and slower replies.\n• 1: overview only (fastest, no slicing)\n• 9: MiniCPM-V upper bound (default, sharpest)</string>
+    <string name="image_slice_hint">More slices = sharper detail but more image tokens and slower replies.\n• 1: overview only (default, fastest)\n• 9: MiniCPM-V upper bound (sharpest, much slower)</string>
     <string name="image_slice_apply_toast">Image slices set to %1$d</string>
     <string name="image_slice_pending_toast">Saved slices = %1$d; takes effect on next model load</string>
 
@@ -47,6 +76,56 @@
     <string name="no_model_file">No model file</string>
     <string name="select_model">Select Model</string>
     <string name="delete_model_files">Delete Model Files</string>
+    <string name="import_local_model">Import Local GGUF</string>
+    <string name="importing_local_model">Importing %1$s...</string>
+    <string name="local_model_ready">Imported %1$s. Loading catgirl model.</string>
+    <string name="toast_local_model_imported">Local catgirl model imported</string>
+    <string name="toast_local_model_import_failed">Failed to import local model: %1$s</string>
+    <string name="error_read_file">Unable to read file</string>
+    <string name="avatar_settings">Avatar Settings</string>
+    <string name="user_avatar">User avatar</string>
+    <string name="catgirl_avatar">Catgirl avatar</string>
+    <string name="choose_user_avatar">User Avatar</string>
+    <string name="choose_catgirl_avatar">Catgirl Avatar</string>
+    <string name="toast_avatar_saved">Avatar saved</string>
+    <string name="toast_avatar_save_failed">Failed to save avatar: %1$s</string>
+
+
+    <string name="new_chat">New Chat</string>
+    <string name="chat_history">History</string>
+    <string name="clear_history">Clear History</string>
+    <string name="new_chat_started">A fresh chat is ready</string>
+    <string name="toast_new_chat_failed">Failed to start a new chat: %1$s</string>
+    <string name="toast_wait_generating">Catgirl is still replying. Please wait a moment.</string>
+    <string name="no_chat_history">No chat history yet</string>
+    <string name="history_opened">History opened</string>
+    <string name="history_cleared">History cleared</string>
+    <string name="history_load_failed">Could not open this history item</string>
+    <string name="history_item_format">%1$s  ·  %2$s  ·  %3$d messages</string>
+    <string name="open_history">Open chat</string>
+    <string name="rename_history">Rename</string>
+    <string name="delete_history">Delete this chat</string>
+    <string name="delete_history_confirm">Delete “%1$s”?</string>
+    <string name="clear_history_confirm">Clear all chat history?</string>
+    <string name="history_renamed">Chat renamed</string>
+    <string name="history_deleted">Chat deleted</string>
+    <string name="history_dialog_hint">Open a history item, or rename and delete it directly.</string>
+    <string name="history_meta_format">%1$s · %2$d messages</string>
+    <string name="history_no_preview">No preview available</string>
+
+    <string name="generation_settings">Model Parameters</string>
+    <string name="generation_preset_label">Presets</string>
+    <string name="generation_preset_balanced">Balanced</string>
+    <string name="generation_preset_careful">Careful</string>
+    <string name="generation_preset_playful">Playful</string>
+    <string name="generation_preset_long">Long</string>
+    <string name="generation_temperature_value">Temperature %1$s</string>
+    <string name="generation_top_p_value">Top-P %1$s</string>
+    <string name="generation_top_k_value">Top-K %1$d</string>
+    <string name="generation_top_k_disabled">Top-K off</string>
+    <string name="generation_predict_value">Max reply %1$d tokens</string>
+    <string name="generation_settings_hint">Higher temperature is livelier. Lower Top-P or Top-K is steadier. Larger max replies are more complete, but slower on phone CPUs.</string>
+    <string name="generation_settings_saved">Model parameters saved</string>
 
     <!-- MainActivity -->
     <string name="toast_load_model_first">Please load a model first</string>
@@ -104,6 +183,7 @@
     <string name="model_desc_v46">Next-gen multimodal model with image understanding (1.2B)</string>
     <string name="model_desc_minicpm5">Lightweight text-only model (1B)</string>
     <string name="model_desc_voxcpm2">Multilingual TTS with voice design and cloning (2B)</string>
+    <string name="model_desc_custom_local">Local GGUF catgirl model imported from this phone, suitable for your MiniCPM5-1B fine-tune</string>
 
     <!-- VideoFrameExtractor -->
     <string name="video_label">Video</string>
@@ -130,6 +210,7 @@
     <string name="download_race_winner">[%1$s] won, downloading %2$s…</string>
     <string name="download_verifying_md5">[%1$s] Verifying %2$s MD5…</string>
     <string name="download_md5_failed">%1$s MD5 verification failed (expected %2$s, got %3$s). File deleted, please retry.</string>
+    <string name="download_invalid_gguf">%1$s is not a valid GGUF file. It was deleted; please download again.</string>
     <string name="download_file_complete">%1$s downloaded (%2$d MB)</string>
     <string name="download_416_mismatch">%1$s returned 416 but local cache size mismatch, please retry</string>
 
@@ -153,7 +234,7 @@
     <string name="tts_play_ref">Play</string>
     <string name="tts_clear_ref">Clear</string>
     <string name="tts_recording">Recording…</string>
-    <string name="tts_ref_recorded">Recorded %.1fs, %d KB</string>
+    <string name="tts_ref_recorded">Recorded %1$.1fs, %2$d KB</string>
     <string name="tts_params_label">Inference Parameters</string>
     <string name="tts_cfg_label">CFG Scale</string>
     <string name="tts_timesteps_label">Timesteps</string>
@@ -176,4 +257,41 @@
     <string name="tts_preset_load_failed">Failed to load preset: %1$s</string>
     <string name="tts_baselm_missing">BaseLM GGUF file missing, please download</string>
     <string name="tts_acoustic_missing">Acoustic GGUF file missing, please download</string>
+
+    <string-array name="welcome_desc_variants">
+        <item>Welcome back, master. I can help with images, ideas, writing, or a tiny bit of daily rambling.</item>
+        <item>Meow, I am ready. Drop me a question, a picture, or a little spark of an idea.</item>
+        <item>Your catgirl assistant is online. Let us make today softer, clearer, and a little cuter.</item>
+        <item>Bring me a puzzle, a draft, or a plan. I will tidy it up with care.</item>
+        <item>Tail up, focus on. What shall we make together today?</item>
+    </string-array>
+    <string-array name="welcome_desc_text_variants">
+        <item>Welcome back, master. Give me the tricky thought, and I will make it easier to hold.</item>
+        <item>Meow, I am ready for questions, writing, plans, and tiny sparks of inspiration.</item>
+        <item>Your catgirl helper is here. One message from master, and I will start thinking.</item>
+        <item>Let us make the next task feel lighter and cuter.</item>
+        <item>I am all ears. What should we explore first?</item>
+    </string-array>
+    <string-array name="suggestion_variants">
+        <item>Help master find the little secrets in this image</item>
+        <item>Write a cute caption for this picture</item>
+        <item>Give this image a catgirl-style comment</item>
+        <item>Find three creative ideas from this image</item>
+        <item>Turn this image into a bedtime-story description</item>
+        <item>Summarize the important parts for master</item>
+    </string-array>
+    <string-array name="suggestion_text_variants">
+        <item>Catgirl, help master plan tonight\'s study time</item>
+        <item>Encourage me to start working, cutely</item>
+        <item>Write a sweet good-morning message</item>
+        <item>Explain this like you are gently coaching master</item>
+        <item>Help master organize today\'s tasks</item>
+        <item>Write a soft little poem for master</item>
+    </string-array>
+    <string name="model_desc_minineko_vision">Download the MiniNeko-V 1.3B Thinking vision model. Supports image understanding.</string>
+    <string name="model_desc_minineko_text">Download the MiniNeko 1B text model. Supports Q4_K_M, Q5_K_M, Q8_0, and F16.</string>
+    <string name="quantization_format">Quantization</string>
+    <string name="quantization_hint">Q4 uses less memory, Q5 is balanced, Q8/F16 are higher quality but larger.</string>
+    <string name="quantization_selected">Selected %1$s. Download or load the matching model file.</string>
+    <string name="source_hf_mirror">HF-Mirror</string>
 </resources>

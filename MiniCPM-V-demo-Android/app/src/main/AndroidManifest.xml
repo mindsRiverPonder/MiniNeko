@@ -18,6 +18,7 @@
     <!-- Android 13+: notification posting now requires runtime consent;
          we ask for it the first time the user taps "下载". -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.CAMERA" />
     <!-- TTS: recording reference audio for voice cloning. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 

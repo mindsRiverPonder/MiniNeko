@@ -2,10 +2,16 @@ package com.example.minicpm_v_demo
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.util.Log
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.CheckBox
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,19 +30,39 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 
 class ModelManagerActivity : AppCompatActivity() {
 
     private lateinit var tvModelStatus: TextView
     private lateinit var btnDownload: MaterialButton
     private lateinit var btnLoadModel: MaterialButton
+    private lateinit var btnImportLocalModel: MaterialButton
     private lateinit var btnDeleteModel: MaterialButton
     private lateinit var progressDownload: LinearProgressIndicator
     private lateinit var recyclerModels: RecyclerView
     private lateinit var tvLanguageValue: TextView
+    private lateinit var layoutQuantization: View
+    private lateinit var spinnerQuantization: Spinner
+    private var isUpdatingQuantization = false
 
     private lateinit var engine: LlamaEngine
     private lateinit var modelAdapter: ModelAdapter
+
+    private val localModelPicker =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let { importLocalModel(it) }
+        }
+
+    private val userAvatarPicker =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let { saveAvatar(it, AvatarStore.AvatarKind.User) }
+        }
+
+    private val catgirlAvatarPicker =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let { saveAvatar(it, AvatarStore.AvatarKind.Catgirl) }
+        }
 
     // Android 13+: POST_NOTIFICATIONS is a runtime permission. We need it
     // for the foreground download service's progress notification (without
@@ -66,14 +92,18 @@ class ModelManagerActivity : AppCompatActivity() {
         tvModelStatus = findViewById(R.id.tv_model_status)
         btnDownload = findViewById(R.id.btn_download)
         btnLoadModel = findViewById(R.id.btn_load_model)
+        btnImportLocalModel = findViewById(R.id.btn_import_local_model)
         btnDeleteModel = findViewById(R.id.btn_delete_model)
         progressDownload = findViewById(R.id.progress_download)
         recyclerModels = findViewById(R.id.recycler_models)
         tvLanguageValue = findViewById(R.id.tv_language_value)
+        layoutQuantization = findViewById(R.id.layout_quantization)
+        spinnerQuantization = findViewById(R.id.spinner_quantization)
 
         engine = LlamaEngine.getInstance(applicationContext)
 
         setupModelList()
+        setupQuantizationPicker()
         updateLoadButtonState()
         observeEngineState()
         observeDownloadStatus()
@@ -81,8 +111,195 @@ class ModelManagerActivity : AppCompatActivity() {
 
         btnDownload.setOnClickListener { onDownloadClicked() }
         btnLoadModel.setOnClickListener { loadSelectedModel() }
+        btnImportLocalModel.setOnClickListener { openLocalModelPicker() }
         btnDeleteModel.setOnClickListener { confirmDeleteModel() }
+        findViewById<View>(R.id.btn_user_avatar).setOnClickListener { openAvatarPicker(AvatarStore.AvatarKind.User) }
+        findViewById<View>(R.id.btn_ai_avatar).setOnClickListener { openAvatarPicker(AvatarStore.AvatarKind.Catgirl) }
+        findViewById<View>(R.id.btn_image_slice_settings).setOnClickListener { showImageSliceDialog() }
+        findViewById<View>(R.id.btn_vision_compression).setOnClickListener { showVisionCompressionDialog() }
         findViewById<View>(R.id.btn_language).setOnClickListener { showLanguagePicker() }
+    }
+
+    private fun showImageSliceDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_image_slice, null, false)
+        val slider = view.findViewById<com.google.android.material.slider.Slider>(R.id.slider_image_slice)
+        val tvValue = view.findViewById<TextView>(R.id.tv_image_slice_value)
+
+        val initial = LlamaEngine.getImageMaxSliceNums(this)
+        slider.value = initial.toFloat()
+        tvValue.text = initial.toString()
+        slider.addOnChangeListener { _, value, _ -> tvValue.text = value.toInt().toString() }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.image_slice_dialog_title)
+            .setView(view)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val chosen = slider.value.toInt()
+                lifecycleScope.launch {
+                    engine.setImageMaxSliceNums(chosen)
+                    val msgRes = if (engine.isVisionSupported) {
+                        R.string.image_slice_apply_toast
+                    } else {
+                        R.string.image_slice_pending_toast
+                    }
+                    Toast.makeText(this@ModelManagerActivity, getString(msgRes, chosen), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showVisionCompressionDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_vision_compression, null, false)
+        val slider = view.findViewById<com.google.android.material.slider.Slider>(R.id.slider_vision_compression)
+        val tvValue = view.findViewById<TextView>(R.id.tv_vision_compression_value)
+        val checkOriginal = view.findViewById<CheckBox>(R.id.check_original_image)
+
+        fun refresh(value: Int) {
+            tvValue.text = if (checkOriginal.isChecked) {
+                getString(R.string.vision_compression_original_value)
+            } else {
+                getString(R.string.vision_compression_value, value)
+            }
+            slider.isEnabled = !checkOriginal.isChecked
+            slider.alpha = if (checkOriginal.isChecked) 0.45f else 1.0f
+        }
+
+        val initial = LlamaEngine.getVisionImageMaxSide(this)
+        checkOriginal.isChecked = initial == LlamaEngine.ORIGINAL_VISION_IMAGE_MAX_SIDE
+        slider.value = (if (checkOriginal.isChecked) {
+            LlamaEngine.DEFAULT_COMPRESSED_VISION_IMAGE_MAX_SIDE
+        } else {
+            initial
+        }).toFloat()
+        refresh(slider.value.toInt())
+        checkOriginal.setOnCheckedChangeListener { _, _ -> refresh(slider.value.toInt()) }
+        slider.addOnChangeListener { _, value, _ -> refresh(value.toInt()) }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.vision_compression_settings)
+            .setView(view)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val chosen = if (checkOriginal.isChecked) {
+                    LlamaEngine.ORIGINAL_VISION_IMAGE_MAX_SIDE
+                } else {
+                    slider.value.toInt()
+                }
+                LlamaEngine.setVisionImageMaxSide(this, chosen)
+                val message = if (chosen == LlamaEngine.ORIGINAL_VISION_IMAGE_MAX_SIDE) {
+                    getString(R.string.vision_compression_saved_original)
+                } else {
+                    getString(R.string.vision_compression_saved, chosen)
+                }
+                Toast.makeText(
+                    this,
+                    message,
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun openLocalModelPicker() {
+        localModelPicker.launch(arrayOf("application/octet-stream", "*/*"))
+    }
+
+    private fun openAvatarPicker(kind: AvatarStore.AvatarKind) {
+        when (kind) {
+            AvatarStore.AvatarKind.User -> userAvatarPicker.launch(arrayOf("image/*"))
+            AvatarStore.AvatarKind.Catgirl -> catgirlAvatarPicker.launch(arrayOf("image/*"))
+        }
+    }
+
+    private fun importLocalModel(uri: Uri) {
+        val sourceName = getFileName(uri)
+        btnImportLocalModel.isEnabled = false
+        btnLoadModel.isEnabled = false
+        btnDownload.isEnabled = false
+        progressDownload.visibility = View.VISIBLE
+        tvModelStatus.text = getString(R.string.importing_local_model, sourceName)
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val customModel = ModelInfo.CUSTOM_LOCAL_MODEL
+                val targetDir = File(LlamaEngine.modelDirFor(applicationContext, customModel))
+                if (!targetDir.exists()) targetDir.mkdirs()
+                val targetFile = File(targetDir, ModelInfo.CUSTOM_LOCAL_GGUF_FILE_NAME)
+                copyUriToFile(uri, targetFile)
+
+                LlamaEngine.setSelectedModel(applicationContext, ModelInfo.CUSTOM_LOCAL_MODEL_ID)
+
+                withContext(Dispatchers.Main) {
+                    modelAdapter.updateSelection(ModelInfo.CUSTOM_LOCAL_MODEL_ID)
+                    progressDownload.visibility = View.GONE
+                    btnImportLocalModel.isEnabled = true
+                    updateLoadButtonState()
+                    tvModelStatus.text = getString(R.string.local_model_ready, sourceName)
+                    Toast.makeText(
+                        this@ModelManagerActivity,
+                        R.string.toast_local_model_imported,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    loadSelectedModel()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error importing local model", e)
+                withContext(Dispatchers.Main) {
+                    progressDownload.visibility = View.GONE
+                    btnImportLocalModel.isEnabled = true
+                    updateLoadButtonState()
+                    tvModelStatus.text = getString(R.string.toast_local_model_import_failed, e.message)
+                    Toast.makeText(
+                        this@ModelManagerActivity,
+                        getString(R.string.toast_local_model_import_failed, e.message),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun saveAvatar(uri: Uri, kind: AvatarStore.AvatarKind) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                AvatarStore.saveAvatar(applicationContext, uri, kind)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ModelManagerActivity, R.string.toast_avatar_saved, Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving avatar", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@ModelManagerActivity,
+                        getString(R.string.toast_avatar_save_failed, e.message),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun copyUriToFile(uri: Uri, targetFile: File) {
+        contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { getString(R.string.error_read_file) }
+            FileOutputStream(targetFile).use { output ->
+                input.copyTo(output, bufferSize = 1024 * 1024)
+            }
+        }
+    }
+
+    private fun getFileName(uri: Uri): String {
+        val cursor = contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0) {
+                    return it.getString(nameIndex)
+                }
+            }
+        }
+        return "local-model.gguf"
     }
 
     private fun setupModelList() {
@@ -93,6 +310,7 @@ class ModelManagerActivity : AppCompatActivity() {
             onModelSelected = { model ->
                 val previousModelId = LlamaEngine.getSelectedModel(this).id
                 LlamaEngine.setSelectedModel(this, model.id)
+                updateQuantizationPicker()
                 updateLoadButtonState()
 
                 if (previousModelId != model.id) {
@@ -108,6 +326,54 @@ class ModelManagerActivity : AppCompatActivity() {
 
         recyclerModels.layoutManager = LinearLayoutManager(this)
         recyclerModels.adapter = modelAdapter
+    }
+
+    private fun setupQuantizationPicker() {
+        spinnerQuantization.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (isUpdatingQuantization) return
+                val model = LlamaEngine.getSelectedModel(this@ModelManagerActivity)
+                val quant = model.quantizations.getOrNull(position) ?: return
+                val previous = LlamaEngine.getSelectedQuantization(this@ModelManagerActivity, model)
+                if (previous?.id == quant.id) return
+
+                LlamaEngine.setSelectedQuantization(this@ModelManagerActivity, model.id, quant.id)
+                updateLoadButtonState()
+
+                val wasLoaded = engine.state.value is LlamaState.ModelReady
+                if (wasLoaded && LlamaEngine.modelsExist(this@ModelManagerActivity)) {
+                    reloadSelectedModel()
+                } else {
+                    tvModelStatus.text = getString(R.string.quantization_selected, quant.label)
+                }
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+        updateQuantizationPicker()
+    }
+
+    private fun updateQuantizationPicker() {
+        val model = LlamaEngine.getSelectedModel(this)
+        if (model.quantizations.isEmpty()) {
+            layoutQuantization.visibility = View.GONE
+            return
+        }
+
+        layoutQuantization.visibility = View.VISIBLE
+        isUpdatingQuantization = true
+        val adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            model.quantizations.map { it.label }
+        ).also {
+            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        spinnerQuantization.adapter = adapter
+        val selected = LlamaEngine.getSelectedQuantization(this, model)
+        val selectedIndex = model.quantizations.indexOfFirst { it.id == selected?.id }.coerceAtLeast(0)
+        spinnerQuantization.setSelection(selectedIndex, false)
+        isUpdatingQuantization = false
     }
 
     private fun reloadSelectedModel() {
@@ -191,6 +457,7 @@ class ModelManagerActivity : AppCompatActivity() {
                         tvModelStatus.text = getString(R.string.status_error, state.exception.message)
                         btnLoadModel.isEnabled = true
                         btnDownload.isEnabled = true
+                        updateLoadButtonState()
                     }
                 }
             }
@@ -200,16 +467,23 @@ class ModelManagerActivity : AppCompatActivity() {
     private fun updateLoadButtonState() {
         val exists = LlamaEngine.modelsExist(this)
         val isReady = engine.state.value is LlamaState.ModelReady
+        val selectedModel = LlamaEngine.getSelectedModel(this)
+        val isCustomLocal = selectedModel.id == ModelInfo.CUSTOM_LOCAL_MODEL_ID
+        btnDownload.isEnabled = !isCustomLocal
         btnLoadModel.isEnabled = exists
         btnDeleteModel.visibility = if (exists) View.VISIBLE else View.GONE
         btnLoadModel.text = when {
-            isReady -> getString(R.string.reload_model)
+            isReady && exists -> getString(R.string.reload_model)
             exists -> getString(R.string.load_model)
             else -> getString(R.string.no_model_file)
         }
     }
 
     private fun onDownloadClicked() {
+        if (LlamaEngine.getSelectedModel(this).id == ModelInfo.CUSTOM_LOCAL_MODEL_ID) {
+            openLocalModelPicker()
+            return
+        }
         if (ModelDownloadController.isRunning) {
             Toast.makeText(this, R.string.toast_downloading, Toast.LENGTH_SHORT).show()
             return

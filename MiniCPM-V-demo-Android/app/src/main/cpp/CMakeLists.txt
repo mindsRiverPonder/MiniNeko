@@ -46,6 +46,16 @@ if(NOT EXISTS ${LLAMA_SRC}/CMakeLists.txt)
 endif()
 message(STATUS "Using llama.cpp-omni source at: ${LLAMA_SRC}")
 
+# Offline build accommodation: GitHub is unreachable in this build environment,
+# so point GGML's KleidiAI FetchContent at a pre-downloaded source tree (MD5
+# matches the upstream release) instead of letting it download from GitHub.
+# Harmless elsewhere: if the directory is absent FetchContent falls back to URL.
+if(EXISTS "C:/mc/.build-tools/tmp/kdl/src/kleidiai-v1.24.0/CMakeLists.txt")
+    set(FETCHCONTENT_SOURCE_DIR_KLEIDIAI_DOWNLOAD
+        "C:/mc/.build-tools/tmp/kdl/src/kleidiai-v1.24.0" CACHE PATH "" FORCE)
+    message(STATUS "KleidiAI: using local source override")
+endif()
+
 add_subdirectory(${LLAMA_SRC} ${CMAKE_BINARY_DIR}/build-llama)
 
 if(NOT DEFINED LLAMA_INSTALL_VERSION)

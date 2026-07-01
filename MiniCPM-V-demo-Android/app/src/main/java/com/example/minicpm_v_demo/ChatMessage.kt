@@ -26,6 +26,7 @@ sealed class ChatMessage {
 
     data class WelcomeCard(
         override val id: Long = 0L,
-        val isTextOnly: Boolean = false
+        val isTextOnly: Boolean = false,
+        val variant: Int = 0
     ) : ChatMessage()
 }

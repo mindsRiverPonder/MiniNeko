@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -69,19 +70,25 @@ class LlamaEngine private constructor(
         private const val PREFS_NAME = "model_prefs"
         private const val KEY_SELECTED_MODEL = "selected_model_id"
         private const val KEY_IMAGE_MAX_SLICE = "image_max_slice_nums"
+        private const val KEY_VISION_IMAGE_MAX_SIDE = "vision_image_max_side"
+        private const val KEY_FAST_VISION_SLICE_APPLIED = "fast_vision_slice_applied"
         private const val KEY_MODEL_SWITCHED = "model_switched"
+        private const val KEY_SELECTED_QUANT_PREFIX = "selected_quant_"
 
         // MiniCPM-V's hard upper bound on slice count.  Values higher than 9
         // get clamped by clip.cpp::get_best_grid anyway; we cap on the UI
         // side to keep the slider semantics honest.
         const val MIN_IMAGE_SLICE = 1
         const val MAX_IMAGE_SLICE = 9
-        // Out-of-the-box we run with MiniCPM-V's full slice budget (9 =
-        // the model's built-in default) so first-launch image quality
-        // matches what the model card promises.  Users who care about
-        // prefill latency drop the chat-page slider down to 1 (no
-        // slicing, ~9x fewer image tokens).
-        const val DEFAULT_IMAGE_SLICE = MAX_IMAGE_SLICE
+        const val MIN_VISION_IMAGE_MAX_SIDE = 448
+        const val MAX_VISION_IMAGE_MAX_SIDE = 2048
+        const val ORIGINAL_VISION_IMAGE_MAX_SIDE = 0
+        const val DEFAULT_COMPRESSED_VISION_IMAGE_MAX_SIDE = 1024
+        const val DEFAULT_VISION_IMAGE_MAX_SIDE = ORIGINAL_VISION_IMAGE_MAX_SIDE
+        // Phone-first default: one overview slice keeps image prefill usable on
+        // local CPU. Users can raise this from the chat-page slider when they
+        // need finer OCR/detail and are willing to wait longer.
+        const val DEFAULT_IMAGE_SLICE = MIN_IMAGE_SLICE
 
         fun getInstance(context: Context): LlamaEngine =
             instance ?: synchronized(this) {
@@ -101,6 +108,27 @@ class LlamaEngine private constructor(
         fun setSelectedModel(context: Context, modelId: String) {
             prefs(context).edit().putString(KEY_SELECTED_MODEL, modelId).apply()
         }
+
+        fun getSelectedQuantization(context: Context, model: ModelInfo): ModelQuantization? {
+            if (model.quantizations.isEmpty()) return null
+            val key = KEY_SELECTED_QUANT_PREFIX + model.id
+            val quantId = prefs(context).getString(key, model.quantizations.first().id)
+            return model.quantizations.find { it.id == quantId } ?: model.quantizations.first()
+        }
+
+        fun setSelectedQuantization(context: Context, modelId: String, quantId: String) {
+            prefs(context).edit().putString(KEY_SELECTED_QUANT_PREFIX + modelId, quantId).apply()
+        }
+
+        fun effectiveGgufFileName(context: Context, model: ModelInfo): String =
+            getSelectedQuantization(context, model)?.ggufFileName ?: model.ggufFileName
+
+        private fun effectiveGgufRemotePath(context: Context, model: ModelInfo): String =
+            getSelectedQuantization(context, model)?.let { it.ggufRemoteName ?: it.ggufFileName }
+                ?: model.ggufRemotePath
+
+        private fun effectiveDirectGgufUrl(context: Context, model: ModelInfo): String? =
+            getSelectedQuantization(context, model)?.directGgufUrl ?: model.directGgufUrl
 
         fun markModelSwitched(context: Context) {
             prefs(context).edit().putBoolean(KEY_MODEL_SWITCHED, true).apply()
@@ -126,6 +154,37 @@ class LlamaEngine private constructor(
             prefs(context).edit().putInt(KEY_IMAGE_MAX_SLICE, clamped).apply()
         }
 
+        fun getVisionImageMaxSide(context: Context): Int =
+            prefs(context).getInt(KEY_VISION_IMAGE_MAX_SIDE, DEFAULT_VISION_IMAGE_MAX_SIDE)
+                .let { value ->
+                    if (value == ORIGINAL_VISION_IMAGE_MAX_SIDE) {
+                        ORIGINAL_VISION_IMAGE_MAX_SIDE
+                    } else {
+                        value.coerceIn(MIN_VISION_IMAGE_MAX_SIDE, MAX_VISION_IMAGE_MAX_SIDE)
+                    }
+                }
+
+        fun setVisionImageMaxSide(context: Context, maxSide: Int) {
+            val clamped = if (maxSide == ORIGINAL_VISION_IMAGE_MAX_SIDE) {
+                ORIGINAL_VISION_IMAGE_MAX_SIDE
+            } else {
+                maxSide.coerceIn(MIN_VISION_IMAGE_MAX_SIDE, MAX_VISION_IMAGE_MAX_SIDE)
+            }
+            prefs(context).edit().putInt(KEY_VISION_IMAGE_MAX_SIDE, clamped).apply()
+        }
+
+        private fun applyFastVisionSliceDefaultIfNeeded(context: Context, model: ModelInfo) {
+            if (model.id != "minineko-vision-online") return
+            val preferences = prefs(context)
+            if (preferences.getBoolean(KEY_FAST_VISION_SLICE_APPLIED, false)) return
+
+            preferences.edit()
+                .putInt(KEY_IMAGE_MAX_SLICE, DEFAULT_IMAGE_SLICE)
+                .putBoolean(KEY_FAST_VISION_SLICE_APPLIED, true)
+                .apply()
+            Log.i(TAG, "Applied fast default image_max_slice_nums=$DEFAULT_IMAGE_SLICE for ${model.id}")
+        }
+
         fun modelDir(context: Context): String =
             File(context.filesDir, MODEL_SUBDIR).absolutePath
 
@@ -134,11 +193,18 @@ class LlamaEngine private constructor(
 
         fun modelPath(context: Context): String {
             val model = getSelectedModel(context)
-            return File(modelDirFor(context, model), model.ggufFileName).absolutePath
+            return modelPath(context, model)
         }
+
+        fun modelPath(context: Context, model: ModelInfo): String =
+            File(modelDirFor(context, model), effectiveGgufFileName(context, model)).absolutePath
 
         fun mmprojPath(context: Context): String? {
             val model = getSelectedModel(context)
+            return mmprojPath(context, model)
+        }
+
+        fun mmprojPath(context: Context, model: ModelInfo): String? {
             val mmproj = model.mmprojFileName ?: return null
             return File(modelDirFor(context, model), mmproj).absolutePath
         }
@@ -151,14 +217,184 @@ class LlamaEngine private constructor(
 
         fun modelsExist(context: Context): Boolean {
             val model = getSelectedModel(context)
-            if (!File(modelPath(context)).exists()) return false
+            return modelsExist(context, model)
+        }
+
+        fun modelsExist(context: Context, model: ModelInfo): Boolean {
+            if (!isValidGgufFile(File(modelPath(context, model)))) return false
             if (model.isTextOnly) return true
             if (model.isTts) {
+                if (model.id != getSelectedModel(context).id) return false
                 val ap = acousticPath(context) ?: return true
-                return File(ap).exists()
+                return isValidGgufFile(File(ap))
             }
-            val mp = mmprojPath(context) ?: return true
-            return File(mp).exists()
+            val mp = mmprojPath(context, model) ?: return true
+            return isValidGgufFile(File(mp))
+        }
+
+        fun isValidGgufFile(file: File): Boolean {
+            if (!file.exists() || !file.isFile || file.length() < 16L) return false
+            return runCatching {
+                FileInputStream(file).use { input ->
+                    val magic = ByteArray(4)
+                    input.read(magic) == 4 &&
+                            magic[0] == 'G'.code.toByte() &&
+                            magic[1] == 'G'.code.toByte() &&
+                            magic[2] == 'U'.code.toByte() &&
+                            magic[3] == 'F'.code.toByte()
+                }
+            }.getOrDefault(false)
+        }
+
+        private fun repairKnownMiniNekoVisionMetadataIfNeeded(file: File) {
+            if (file.name != "MiniNeko_vision-1.3B-f16.gguf" &&
+                file.name != "MiniNeko_vision-1.3B-Q4_K_M.gguf") return
+
+            try {
+                RandomAccessFile(file, "rw").use { raf ->
+                    fun readU32(): Long {
+                        var value = 0L
+                        repeat(4) { shift ->
+                            val b = raf.read()
+                            if (b < 0) throw IllegalStateException("Unexpected EOF while reading GGUF")
+                            value = value or ((b.toLong() and 0xffL) shl (8 * shift))
+                        }
+                        return value
+                    }
+
+                    fun readU64(): Long {
+                        var value = 0L
+                        repeat(8) { shift ->
+                            val b = raf.read()
+                            if (b < 0) throw IllegalStateException("Unexpected EOF while reading GGUF")
+                            value = value or ((b.toLong() and 0xffL) shl (8 * shift))
+                        }
+                        return value
+                    }
+
+                    fun readString(): String {
+                        val len = readU64()
+                        require(len <= Int.MAX_VALUE) { "GGUF string too large: $len" }
+                        val bytes = ByteArray(len.toInt())
+                        raf.readFully(bytes)
+                        return bytes.toString(Charsets.UTF_8)
+                    }
+
+                    fun skipBytes64(n: Long) {
+                        raf.seek(raf.filePointer + n)
+                    }
+
+                    fun scalarSize(type: Long): Long = when (type) {
+                        0L, 1L, 7L -> 1L
+                        2L, 3L -> 2L
+                        4L, 5L, 6L -> 4L
+                        10L, 11L, 12L -> 8L
+                        else -> -1L
+                    }
+
+                    fun skipValue(type: Long) {
+                        val size = scalarSize(type)
+                        when {
+                            size > 0L -> skipBytes64(size)
+                            type == 8L -> skipBytes64(readU64())
+                            type == 9L -> {
+                                val elemType = readU32()
+                                val count = readU64()
+                                if (elemType == 8L) {
+                                    repeat(count.toInt()) { skipBytes64(readU64()) }
+                                } else {
+                                    val elemSize = scalarSize(elemType)
+                                    require(elemSize > 0L) { "Unsupported GGUF array type: $elemType" }
+                                    skipBytes64(elemSize * count)
+                                }
+                            }
+                            else -> throw IllegalStateException("Unsupported GGUF metadata type: $type")
+                        }
+                    }
+
+                    fun writeU32At(offset: Long, value: Int) {
+                        raf.seek(offset)
+                        raf.write(byteArrayOf(
+                            (value and 0xff).toByte(),
+                            ((value ushr 8) and 0xff).toByte(),
+                            ((value ushr 16) and 0xff).toByte(),
+                            ((value ushr 24) and 0xff).toByte()
+                        ))
+                    }
+
+                    val magic = ByteArray(4)
+                    raf.readFully(magic)
+                    if (!magic.contentEquals(byteArrayOf('G'.code.toByte(), 'G'.code.toByte(), 'U'.code.toByte(), 'F'.code.toByte()))) {
+                        return
+                    }
+                    readU32()
+                    val tensorCount = readU64()
+                    val kvCount = readU64()
+
+                    var architecture: String? = null
+                    var blockCount: Int? = null
+                    var blockCountOffset = -1L
+                    var nextnPredictLayers: Int? = null
+                    var nextnPredictLayersOffset = -1L
+
+                    repeat(kvCount.toInt()) {
+                        val key = readString()
+                        val type = readU32()
+                        val valueOffset = raf.filePointer
+                        when {
+                            key == "general.architecture" && type == 8L -> architecture = readString()
+                            key == "qwen35.block_count" && type == 4L -> {
+                                blockCountOffset = valueOffset
+                                blockCount = readU32().toInt()
+                            }
+                            key == "qwen35.nextn_predict_layers" && type == 4L -> {
+                                nextnPredictLayersOffset = valueOffset
+                                nextnPredictLayers = readU32().toInt()
+                            }
+                            else -> skipValue(type)
+                        }
+                    }
+
+                    var maxBlock = -1
+                    var hasBlk24 = false
+                    var nextnTensorCount = 0
+                    repeat(tensorCount.toInt()) {
+                        val name = readString()
+                        if (name.contains("nextn")) nextnTensorCount++
+                        if (name.startsWith("blk.")) {
+                            val block = name.substringAfter("blk.")
+                                .substringBefore(".")
+                                .toIntOrNull()
+                            if (block != null) {
+                                maxBlock = maxOf(maxBlock, block)
+                                if (block == 24) hasBlk24 = true
+                            }
+                        }
+                        val dims = readU32()
+                        skipBytes64(dims * 8L)
+                        readU32()
+                        readU64()
+                    }
+
+                    val needsRepair =
+                        architecture == "qwen35" &&
+                                blockCount == 25 &&
+                                nextnPredictLayers == 1 &&
+                                maxBlock == 23 &&
+                                !hasBlk24 &&
+                                nextnTensorCount == 0 &&
+                                blockCountOffset >= 0L &&
+                                nextnPredictLayersOffset >= 0L
+
+                    if (needsRepair) {
+                        writeU32At(blockCountOffset, 24)
+                        writeU32At(nextnPredictLayersOffset, 0)
+                        Log.w(TAG, "Repaired MiniNeko vision GGUF metadata: block_count 25->24, nextn_predict_layers 1->0")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to inspect/repair MiniNeko vision GGUF metadata; continuing with original file", e)
+            }
         }
 
         // Rename map for files that were previously sideloaded with a
@@ -235,14 +471,14 @@ class LlamaEngine private constructor(
 
             for (model in ModelInfo.AVAILABLE_MODELS) {
                 val targetDir = File(rootDir, model.id)
-                val flatGguf = File(rootDir, model.ggufFileName)
+                val flatGguf = File(rootDir, effectiveGgufFileName(context, model))
                 val flatMmproj = model.mmprojFileName?.let { File(rootDir, it) }
                 if (flatGguf.exists() || (flatMmproj != null && flatMmproj.exists())) {
                     if (!targetDir.exists()) targetDir.mkdirs()
                     if (flatGguf.exists()) {
-                        val dst = File(targetDir, model.ggufFileName)
+                        val dst = File(targetDir, effectiveGgufFileName(context, model))
                         if (!dst.exists() && flatGguf.renameTo(dst)) {
-                            Log.i(TAG, "Migrated legacy ${model.ggufFileName} into ${model.id}/")
+                            Log.i(TAG, "Migrated legacy ${effectiveGgufFileName(context, model)} into ${model.id}/")
                         }
                     }
                     if (flatMmproj != null && flatMmproj.exists() && model.mmprojFileName != null) {
@@ -293,7 +529,8 @@ class LlamaEngine private constructor(
         // tag that the (legacy) fork mtmd-ios.h would have returned via
         // mtmd_get_minicpmv_version.  Used in [loadModel] to push the value
         // down to native after loadMmproj.
-        //   - 46  : MiniCPM-V-4.6 instruct (the demo's only V-4.6 build)
+        //   - 46  : MiniCPM-V-4.6 instruct / mobile fast visible-answer path
+        //   - 461 : MiniCPM-V-4.6 thinking
         //   - 5   : MiniCPM-V-4 (corresponds to upstream `clip.minicpmv_version=5`)
         //   - 0   : no match / unknown -> native treats as "no vision-version
         //           gating; use default n_ctx + plain assistant prefix"
@@ -303,6 +540,10 @@ class LlamaEngine private constructor(
         fun inferMinicpmvVersion(model: ModelInfo): Int = when (model.id) {
             "minicpm-v-4_6-instruct" -> 46
             "minicpm-v-4"            -> 5
+            // MiniNeko vision is MiniCPM-V-4.6 Thinking; keep the model on
+            // the thinking generation prompt instead of forcing an empty
+            // <think>...</think> block.
+            "minineko-vision-online" -> 461
             else                     -> 0
         }
 
@@ -347,8 +588,9 @@ class LlamaEngine private constructor(
             if (model.hasHfMsSources) {
                 val hfBase = "https://huggingface.co/${model.hfRepo}/resolve/${model.hfBranch}"
                 val msBase = "https://www.modelscope.cn/models/${model.msRepo}/resolve/${model.msBranch}"
-                ggufSources.add(FileSource("HuggingFace", URL("$hfBase/${model.ggufRemotePath}")))
-                ggufSources.add(FileSource("ModelScope", URL("$msBase/${model.ggufRemotePath}")))
+                val ggufRemotePath = effectiveGgufRemotePath(context, model)
+                ggufSources.add(FileSource("HuggingFace", URL("$hfBase/$ggufRemotePath")))
+                ggufSources.add(FileSource("ModelScope", URL("$msBase/$ggufRemotePath")))
                 if (model.isTts) {
                     model.acousticRemotePath?.let { rp ->
                         acousticSources.add(FileSource("HuggingFace", URL("$hfBase/$rp")))
@@ -359,14 +601,20 @@ class LlamaEngine private constructor(
                     mmprojSources.add(FileSource("ModelScope", URL("$msBase/${model.mmprojRemotePath}")))
                 }
             }
-            if (!model.directGgufUrl.isNullOrBlank()) {
-                ggufSources.add(FileSource(context.getString(R.string.source_direct), URL(model.directGgufUrl)))
+            effectiveDirectGgufUrl(context, model)?.takeIf { it.isNotBlank() }?.let { url ->
+                val labelRes = if (url.contains("hf-mirror.com")) R.string.source_hf_mirror else R.string.source_direct
+                ggufSources.add(FileSource(context.getString(labelRes), URL(url)))
             }
             if (model.isTts && !model.directAcousticUrl.isNullOrBlank()) {
                 acousticSources.add(FileSource(context.getString(R.string.source_direct), URL(model.directAcousticUrl)))
             }
             if (!model.isTextOnly && !model.isTts && !model.directMmprojUrl.isNullOrBlank()) {
-                mmprojSources.add(FileSource(context.getString(R.string.source_direct), URL(model.directMmprojUrl)))
+                val labelRes = if (model.directMmprojUrl.contains("hf-mirror.com")) {
+                    R.string.source_hf_mirror
+                } else {
+                    R.string.source_direct
+                }
+                mmprojSources.add(FileSource(context.getString(labelRes), URL(model.directMmprojUrl)))
             }
 
             if (ggufSources.isEmpty()) {
@@ -380,7 +628,7 @@ class LlamaEngine private constructor(
             }
 
             val files = mutableListOf(
-                FileSpec(model.ggufFileName, ggufSources, model.ggufMd5),
+                FileSpec(effectiveGgufFileName(context, model), ggufSources, model.ggufMd5),
             )
             if (model.isTts && model.acousticFileName != null) {
                 files.add(FileSpec(model.acousticFileName, acousticSources, model.acousticMd5))
@@ -440,6 +688,10 @@ class LlamaEngine private constructor(
 
             val targetFile = File(dir, fileName)
             val tmpFile = File(dir, "$fileName.tmp")
+            if (tmpFile.exists() && !isValidGgufFile(tmpFile)) {
+                Log.w(TAG, "$fileName tmp file is not GGUF; restarting download")
+                tmpFile.delete()
+            }
 
             // Fast path: same as downloadFile - if target already exists and
             // MD5 matches the manifest, treat as done.
@@ -476,16 +728,7 @@ class LlamaEngine private constructor(
                     launch(Dispatchers.IO) {
                         var conn: HttpURLConnection? = null
                         try {
-                            conn = (src.url.openConnection() as HttpURLConnection).apply {
-                                connectTimeout = 10_000
-                                readTimeout = 120_000
-                                requestMethod = "GET"
-                                instanceFollowRedirects = true
-                                setRequestProperty("User-Agent", "MiniCPMV-demo/1.0")
-                                if (resumeFrom > 0) {
-                                    setRequestProperty("Range", "bytes=$resumeFrom-")
-                                }
-                            }
+                            conn = openDownloadConnection(src.url, resumeFrom)
                             openConns[idx] = conn
                             Log.i(TAG, "race[$idx] ${src.label} -> ${src.url} start")
 
@@ -640,6 +883,7 @@ class LlamaEngine private constructor(
                     }
                     Log.i(TAG, "$fileName MD5 OK ($actual)")
                 }
+                verifyDownloadedGguf(context, targetFile, fileName)
 
                 onProgress(context.getString(R.string.download_file_complete, fileName, (targetFile.length() / (1024 * 1024)).toInt()))
                 Log.i(TAG, "$fileName saved to ${targetFile.absolutePath} (winner=$source)")
@@ -670,6 +914,10 @@ class LlamaEngine private constructor(
         ) {
             val targetFile = File(dir, fileName)
             val tmpFile = File(dir, "$fileName.tmp")
+            if (tmpFile.exists() && !isValidGgufFile(tmpFile)) {
+                Log.w(TAG, "$fileName tmp file is not GGUF; restarting download")
+                tmpFile.delete()
+            }
 
             // Fast path: if the file is already on disk and its hash matches,
             // skip re-downloading. Saves 500MB-1GB on app reinstall / dev
@@ -701,16 +949,7 @@ class LlamaEngine private constructor(
                 Log.i(TAG, "Downloading $fileName from $source: $url")
             }
 
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 10000
-                readTimeout = 120000
-                requestMethod = "GET"
-                instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "MiniCPMV-demo/1.0")
-                if (resumeFrom > 0) {
-                    setRequestProperty("Range", "bytes=$resumeFrom-")
-                }
-            }
+            val conn = openDownloadConnection(url, resumeFrom)
 
             try {
                 val responseCode = conn.responseCode
@@ -815,6 +1054,7 @@ class LlamaEngine private constructor(
                     }
                     Log.i(TAG, "$fileName MD5 OK ($actual)")
                 }
+                verifyDownloadedGguf(context, targetFile, fileName)
 
                 onProgress(context.getString(R.string.download_file_complete, fileName, (targetFile.length() / (1024 * 1024)).toInt()))
                 Log.i(TAG, "$fileName saved to ${targetFile.absolutePath}")
@@ -833,6 +1073,38 @@ class LlamaEngine private constructor(
             val slash = header.lastIndexOf('/')
             if (slash < 0 || slash == header.length - 1) return null
             return header.substring(slash + 1).trim().toLongOrNull()
+        }
+
+        private fun openDownloadConnection(url: URL, resumeFrom: Long, redirects: Int = 0): HttpURLConnection {
+            require(redirects <= 6) { "Too many redirects while downloading $url" }
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 10_000
+                readTimeout = 120_000
+                requestMethod = "GET"
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "MiniCPMV-demo/1.0")
+                if (resumeFrom > 0) {
+                    setRequestProperty("Range", "bytes=$resumeFrom-")
+                }
+            }
+
+            val code = conn.responseCode
+            if (code in 300..399) {
+                val location = conn.getHeaderField("Location")
+                conn.disconnect()
+                if (!location.isNullOrBlank()) {
+                    val next = URL(url, location)
+                    Log.i(TAG, "Following redirect $code: $url -> $next")
+                    return openDownloadConnection(next, resumeFrom, redirects + 1)
+                }
+            }
+            return conn
+        }
+
+        private fun verifyDownloadedGguf(context: Context, file: File, fileName: String) {
+            if (isValidGgufFile(file)) return
+            file.delete()
+            throw RuntimeException(context.getString(R.string.download_invalid_gguf, fileName))
         }
 
         // Streaming MD5 over a file. Buffer size kept small enough to avoid
@@ -868,6 +1140,8 @@ class LlamaEngine private constructor(
     @Volatile
     private var _readyForSystemPrompt = false
 
+    private var _pendingImageData: ByteArray? = null
+
     private external fun init(nativeLibDir: String)
     private external fun load(modelPath: String): Int
     // image_max_slice_nums: 1..9 (or -1 for model default).  See JNI for
@@ -877,6 +1151,7 @@ class LlamaEngine private constructor(
     // setImageMaxSliceNumsNative to avoid the name collision with the
     // public suspend wrapper above.
     private external fun setImageMaxSliceNumsNative(n: Int)
+    private external fun setSamplingParamsNative(temperature: Float, topP: Float, topK: Int)
     // Pushes the MiniCPM-V family version (5 / 46 / 100045 / ...) down to
     // native so prepare()'s n_ctx selection and the assistant-turn prefix
     // logic see the right value.  Required since upstream master mtmd
@@ -889,6 +1164,12 @@ class LlamaEngine private constructor(
     private external fun systemInfo(): String
     private external fun processSystemPrompt(systemPrompt: String): Int
     private external fun processUserPrompt(userPrompt: String, predictLength: Int): Int
+    private external fun processUserPromptWithImage(
+        userPrompt: String,
+        imageData: ByteArray,
+        imageSize: Int,
+        predictLength: Int
+    ): Int
     private external fun generateNextToken(): String?
     private external fun prefillImage(imageData: ByteArray, imageSize: Int): Int
     private external fun fullReset()
@@ -940,9 +1221,12 @@ class LlamaEngine private constructor(
                     require(it.exists()) { "File not found: $pathToModel" }
                     require(it.isFile) { "Not a valid file: $pathToModel" }
                     require(it.canRead()) { "Cannot read file: $pathToModel" }
+                    require(isValidGgufFile(it)) { "Invalid GGUF file, please delete and re-download: ${it.name}" }
+                    repairKnownMiniNekoVisionMetadataIfNeeded(it)
                 }
 
                 Log.i(TAG, "Loading model... \n$pathToModel")
+                _pendingImageData = null
                 _readyForSystemPrompt = false
                 _state.value = LlamaState.LoadingModel
                 load(pathToModel).let {
@@ -955,8 +1239,10 @@ class LlamaEngine private constructor(
                         require(it.exists()) { "mmproj file not found: $pathToMmproj" }
                         require(it.isFile) { "Not a valid mmproj file: $pathToMmproj" }
                         require(it.canRead()) { "Cannot read mmproj file: $pathToMmproj" }
+                        require(isValidGgufFile(it)) { "Invalid mmproj GGUF, please delete and re-download: ${it.name}" }
                     }
 
+                    applyFastVisionSliceDefaultIfNeeded(context, getSelectedModel(context))
                     val sliceCap = getImageMaxSliceNums(context)
                     Log.i(TAG, "Loading mmproj (image_max_slice_nums=$sliceCap)... \n$pathToMmproj")
                     loadMmproj(pathToMmproj, sliceCap).let {
@@ -967,8 +1253,7 @@ class LlamaEngine private constructor(
                             // Upstream master mtmd dropped mtmd_get_minicpmv_version, so the
                             // native side can no longer auto-detect which MiniCPM-V family
                             // an mmproj belongs to.  Push the version down from Kotlin based
-                            // on the selected ModelInfo id; native uses this to (a) flip
-                            // n_ctx to V46_CONTEXT_SIZE on prepare() and (b) pick the right
+                            // on the selected ModelInfo id; native uses this to pick the right
                             // assistant-turn prefix.  Mirrors iOS opt-r1, which routes the
                             // same hint through the MBMtmd bridge / MTMDParams.
                             val mv = inferMinicpmvVersion(getSelectedModel(context))
@@ -976,6 +1261,8 @@ class LlamaEngine private constructor(
                             Log.i(TAG, "mmproj loaded successfully! minicpmv_version=$mv")
                         }
                     }
+                } else {
+                    setMinicpmvVersionNative(0)
                 }
 
                 prepare().let {
@@ -1011,6 +1298,10 @@ class LlamaEngine private constructor(
         }
     }
 
+    fun applyGenerationSettings(settings: GenerationSettingsStore.Settings) {
+        setSamplingParamsNative(settings.temperature, settings.topP, settings.topK)
+    }
+
     suspend fun setSystemPrompt(prompt: String) =
         withContext(llamaDispatcher) {
             require(prompt.isNotBlank()) { "Cannot process empty system prompt!" }
@@ -1042,6 +1333,7 @@ class LlamaEngine private constructor(
             }
 
             Log.i(TAG, "Prefilling image...")
+            _pendingImageData = null
             _state.value = LlamaState.PrefillingImage
             val result = prefillImage(imageData, imageData.size)
             if (result != 0) {
@@ -1052,12 +1344,22 @@ class LlamaEngine private constructor(
             _state.value = LlamaState.ModelReady
         }
 
+    suspend fun stageImageForNextPrompt(imageData: ByteArray) =
+        withContext(llamaDispatcher) {
+            check(_mmprojLoaded) { "Vision model not loaded!" }
+            check(_state.value is LlamaState.ModelReady) {
+                "Cannot stage image in ${_state.value.javaClass.simpleName}!"
+            }
+
+            _pendingImageData = imageData.copyOf()
+            Log.i(TAG, "Image staged for next user prompt (${imageData.size} bytes)")
+        }
+
     /**
      * True iff the currently loaded mmproj advertises a MiniCPM-V-4.6
      * family clip (46 / 460 / 461).  Earlier models share the same image
      * code path but the iOS demo also restricts video understanding to
-     * V-4.6 because the perceiver token count + extended `n_ctx=8192`
-     * combine to make multi-frame prefill cheap enough to be usable.
+     * V-4.6 because the perceiver token layout is specific to that family.
      * The Android backend mirrors that gate by reading
      * mtmd_get_minicpmv_version() back through getMinicpmvVersionNative.
      */
@@ -1138,6 +1440,7 @@ class LlamaEngine private constructor(
             check(_state.value is LlamaState.ModelReady) {
                 "Cannot clear context in ${_state.value.javaClass.simpleName}"
             }
+            _pendingImageData = null
             fullReset()
             _readyForSystemPrompt = true
             Log.i(TAG, "Context fully reset - context recreated, ready for new conversation")
@@ -1148,34 +1451,48 @@ class LlamaEngine private constructor(
         predictLength: Int = DEFAULT_PREDICT_LENGTH
     ): Flow<String> = flow {
         require(message.isNotEmpty()) { "User prompt must not be empty!" }
-        check(_state.value is LlamaState.ModelReady) {
-            "User prompt discarded due to: ${_state.value.javaClass.simpleName}"
+        if (_state.value !is LlamaState.ModelReady) {
+            Log.w(TAG, "User prompt ignored because state=${_state.value.javaClass.simpleName}")
+            return@flow
         }
 
         try {
+            val settings = GenerationSettingsStore.get(context)
+            setSamplingParamsNative(settings.temperature, settings.topP, settings.topK)
             _cancelGeneration = false
             Log.i(TAG, "Sending user prompt...")
             _readyForSystemPrompt = false
             _state.value = LlamaState.ProcessingUserPrompt
 
-            processUserPrompt(message, predictLength).let { result ->
-                if (result != 0) {
-                    Log.e(TAG, "Failed to process user prompt: $result")
-                    return@flow
-                }
+            val actualPredictLength = predictLength.coerceIn(32, GenerationSettingsStore.MAX_PREDICT_LENGTH)
+            val result = processUserPrompt(message, actualPredictLength)
+            if (result != 0) {
+                Log.e(TAG, "Failed to process user prompt: $result")
+                return@flow
             }
 
             Log.i(TAG, "User prompt processed. Generating assistant prompt...")
             _state.value = LlamaState.Generating
+            var emittedChunks = 0
+            var emittedChars = 0
             while (!_cancelGeneration) {
                 generateNextToken()?.let { utf8token ->
-                    if (utf8token.isNotEmpty()) emit(utf8token)
+                    if (utf8token.isNotEmpty()) {
+                        emittedChunks += 1
+                        emittedChars += utf8token.length
+                        if (emittedChunks == 1) {
+                            Log.i(TAG, "First assistant token chunk received (${utf8token.length} chars)")
+                        } else if (emittedChunks % 32 == 0) {
+                            Log.i(TAG, "Assistant streaming progress: chunks=$emittedChunks chars=$emittedChars")
+                        }
+                        emit(utf8token)
+                    }
                 } ?: break
             }
             if (_cancelGeneration) {
-                Log.i(TAG, "Assistant generation aborted per requested.")
+                Log.i(TAG, "Assistant generation aborted per requested. chunks=$emittedChunks chars=$emittedChars")
             } else {
-                Log.i(TAG, "Assistant generation complete. Awaiting user prompt...")
+                Log.i(TAG, "Assistant generation complete. chunks=$emittedChunks chars=$emittedChars. Awaiting user prompt...")
             }
             _state.value = LlamaState.ModelReady
         } catch (e: CancellationException) {
@@ -1199,6 +1516,7 @@ class LlamaEngine private constructor(
     suspend fun unloadModel() = withContext(llamaDispatcher) {
         if (_state.value is LlamaState.ModelReady) {
             Log.i(TAG, "Unloading model...")
+            _pendingImageData = null
             _readyForSystemPrompt = false
             _mmprojLoaded = false
             _state.value = LlamaState.UnloadingModel
@@ -1209,6 +1527,7 @@ class LlamaEngine private constructor(
     }
 
     fun resetToInitialized() {
+        _pendingImageData = null
         _mmprojLoaded = false
         _readyForSystemPrompt = false
         _cancelGeneration = false
@@ -1221,6 +1540,7 @@ class LlamaEngine private constructor(
             when (val state = _state.value) {
                 is LlamaState.ModelReady -> {
                     Log.i(TAG, "Unloading model and free resources...")
+                    _pendingImageData = null
                     _readyForSystemPrompt = false
                     _mmprojLoaded = false
                     _state.value = LlamaState.UnloadingModel
@@ -1230,6 +1550,7 @@ class LlamaEngine private constructor(
                 }
                 is LlamaState.Error -> {
                     Log.i(TAG, "Resetting error states...")
+                    _pendingImageData = null
                     _mmprojLoaded = false
                     _state.value = LlamaState.Initialized
                 }
@@ -1242,6 +1563,7 @@ class LlamaEngine private constructor(
         _cancelGeneration = true
         runBlocking(llamaDispatcher) {
             _readyForSystemPrompt = false
+            _pendingImageData = null
             _mmprojLoaded = false
             when (_state.value) {
                 is LlamaState.Uninitialized -> {}

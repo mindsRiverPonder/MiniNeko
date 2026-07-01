@@ -1,9 +1,36 @@
 <resources>
-    <string name="app_name">MiniCPM-V-demo</string>
-    <string name="app_title">MiniCPM-V</string>
-    <string name="app_title_text">MiniCPM</string>
-    <string name="welcome_title">Welcome to MiniCPM-V</string>
-    <string name="welcome_title_text">Welcome to MiniCPM</string>
+    <string name="app_name">DeepNeko</string>
+    <string name="app_title">DeepNeko</string>
+    <string name="app_title_text">DeepNeko</string>
+    <string name="quick_model_switch_title">选择已下载模型</string>
+    <string name="quick_model_switch_empty">还没有检测到已下载好的聊天模型，先去模型管理下载一个吧。</string>
+    <string name="quick_model_switch_hint">点一下就能立刻切换，主人不用每次都钻进设置里啦。</string>
+    <string name="quick_model_current_format">%1$s（当前）</string>
+    <string name="quick_model_already_loaded">%1$s 已经加载好啦</string>
+    <string name="quick_model_icon_text">文</string>
+    <string name="quick_model_icon_vision">图</string>
+    <string name="quick_model_loaded_badge">已加载</string>
+    <string name="quick_model_ready_badge">可切换</string>
+    <string name="take_photo">拍照</string>
+    <string name="captured_photo_name">拍照图片</string>
+    <string name="toast_camera_cancelled">已取消拍照</string>
+    <string name="toast_camera_permission_denied">没有相机权限，猫娘拍不了照啦</string>
+    <string name="toast_wait_image_prefill">正在分析图片中，喵~等会再发</string>
+    <string name="vision_settings">视觉设置</string>
+    <string name="vision_compression_settings">图片压缩尺寸</string>
+    <string name="vision_compression_value">长边 %1$d px</string>
+    <string name="vision_compression_original">使用原图，不压缩</string>
+    <string name="vision_compression_original_value">原图</string>
+    <string name="vision_compression_hint">默认使用原图，适合论文截图和表格。关闭原图模式后，可设置压缩长边；数值越大细节越多，但视觉预填会更慢、占用内存更高。</string>
+    <string name="vision_compression_saved">图片长边上限已设为 %1$d px</string>
+    <string name="vision_compression_saved_original">已设为使用原图，不压缩</string>
+    <string name="switch_anyway">继续切换</string>
+    <string name="keep_vision_model">先不切换</string>
+    <string name="vision_to_text_warning_title">要切到文本模型吗？</string>
+    <string name="vision_to_text_warning_message">这样会丢失图片信息，文本模型看不了图，喵~</string>
+    <string name="neko_kitten_warning_image">撅嘴猫娘幼崽提示图</string>
+    <string name="welcome_title">欢迎回来，主人</string>
+    <string name="welcome_title_text">欢迎回来，主人</string>
     <string name="welcome_desc">让我协助你了解知识、获得灵感、提升效率，我可以进行多轮对话互动、根据图片给出信息并进一步解读。</string>
     <string name="welcome_desc_text">让我协助你了解知识、获得灵感、提升效率，我可以进行多轮对话互动，回答你的各种问题。</string>
     <string name="suggestion_1">请描述图片中的内容。</string>
@@ -36,7 +63,7 @@
     <string name="image_slice_dialog_title">图片切片数</string>
     <string name="image_slice_label_min">1\n极速</string>
     <string name="image_slice_label_max">9\n最清晰</string>
-    <string name="image_slice_hint">切片越多，模型能识别的图片细节越清晰；同时图像 token 更多，回答耗时也越长。\n• 1：单张概览（最快，无切图）\n• 9：MiniCPM-V 模型上限（默认，最清晰）</string>
+    <string name="image_slice_hint">切片越多，模型能识别的图片细节越清晰；同时图像 token 更多，回答耗时也越长。\n• 1：单张概览（默认，最快）\n• 9：MiniCPM-V 模型上限（最清晰，但会明显变慢）</string>
     <string name="image_slice_apply_toast">图片切片数已切换为 %1$d</string>
     <string name="image_slice_pending_toast">已保存切片数 %1$d，下次加载模型时生效</string>
 
@@ -50,6 +77,56 @@
     <string name="no_model_file">无模型文件</string>
     <string name="select_model">选择模型</string>
     <string name="delete_model_files">删除模型文件</string>
+    <string name="import_local_model">导入本地 GGUF</string>
+    <string name="importing_local_model">正在导入 %1$s...</string>
+    <string name="local_model_ready">已导入 %1$s，正在加载猫娘模型</string>
+    <string name="toast_local_model_imported">本地猫娘模型已导入</string>
+    <string name="toast_local_model_import_failed">导入本地模型失败: %1$s</string>
+    <string name="error_read_file">无法读取文件</string>
+    <string name="avatar_settings">头像设置</string>
+    <string name="user_avatar">用户头像</string>
+    <string name="catgirl_avatar">猫娘头像</string>
+    <string name="choose_user_avatar">用户头像</string>
+    <string name="choose_catgirl_avatar">猫娘头像</string>
+    <string name="toast_avatar_saved">头像已保存</string>
+    <string name="toast_avatar_save_failed">保存头像失败: %1$s</string>
+
+
+    <string name="new_chat">新建对话</string>
+    <string name="chat_history">历史对话</string>
+    <string name="clear_history">清空历史</string>
+    <string name="new_chat_started">已经准备好新的对话啦</string>
+    <string name="toast_new_chat_failed">新建对话失败: %1$s</string>
+    <string name="toast_wait_generating">猫娘还在回复中，请稍等一下</string>
+    <string name="no_chat_history">还没有历史对话</string>
+    <string name="history_opened">已打开历史对话</string>
+    <string name="history_cleared">历史对话已清空</string>
+    <string name="history_load_failed">这条历史对话打不开了</string>
+    <string name="history_item_format">%1$s  ·  %2$s  ·  %3$d 条</string>
+    <string name="open_history">打开对话</string>
+    <string name="rename_history">重命名</string>
+    <string name="delete_history">删除这条历史</string>
+    <string name="delete_history_confirm">确定删除“%1$s”吗？</string>
+    <string name="clear_history_confirm">确定清空所有历史对话吗？</string>
+    <string name="history_renamed">历史对话已改名</string>
+    <string name="history_deleted">历史对话已删除</string>
+    <string name="history_dialog_hint">点开一条历史继续查看，也可以直接改名或删除。</string>
+    <string name="history_meta_format">%1$s · %2$d 条消息</string>
+    <string name="history_no_preview">这条历史暂时没有预览内容</string>
+
+    <string name="generation_settings">模型参数</string>
+    <string name="generation_preset_label">预设</string>
+    <string name="generation_preset_balanced">均衡</string>
+    <string name="generation_preset_careful">认真</string>
+    <string name="generation_preset_playful">灵感</string>
+    <string name="generation_preset_long">长文</string>
+    <string name="generation_temperature_value">温度 %1$s</string>
+    <string name="generation_top_p_value">Top-P %1$s</string>
+    <string name="generation_top_k_value">Top-K %1$d</string>
+    <string name="generation_top_k_disabled">Top-K 关闭</string>
+    <string name="generation_predict_value">最大回复 %1$d tokens</string>
+    <string name="generation_settings_hint">温度越高越活泼，Top-P/Top-K 越低越稳。最大回复越大，猫娘能说得更完整，但手机生成时间也会更长。</string>
+    <string name="generation_settings_saved">模型参数已保存</string>
 
     <!-- MainActivity -->
     <string name="toast_load_model_first">请先加载模型</string>
@@ -107,6 +184,7 @@
     <string name="model_desc_v46">新一代多模态模型，支持图文理解 (1.2B)</string>
     <string name="model_desc_minicpm5">轻量级纯文本模型 (1B)</string>
     <string name="model_desc_voxcpm2">多语言语音合成模型, 支持音色设计与声音克隆 (2B)</string>
+    <string name="model_desc_custom_local">从手机本地导入的 GGUF 猫娘模型，适合你自己训练的 MiniCPM5-1B</string>
 
     <!-- VideoFrameExtractor -->
     <string name="video_label">视频</string>
@@ -133,6 +211,7 @@
     <string name="download_race_winner">[%1$s] 胜出，开始下载 %2$s…</string>
     <string name="download_verifying_md5">[%1$s] 校验 %2$s MD5…</string>
     <string name="download_md5_failed">%1$s MD5 校验失败 (期望 %2$s, 实际 %3$s)，文件已删除，请重试</string>
+    <string name="download_invalid_gguf">%1$s 不是有效 GGUF 文件，已删除，请重新下载</string>
     <string name="download_file_complete">%1$s 下载完成 (%2$d MB)</string>
     <string name="download_416_mismatch">%1$s 返回 416 但本地缓存大小异常，请重试</string>
 
@@ -156,7 +235,7 @@
     <string name="tts_play_ref">试听</string>
     <string name="tts_clear_ref">清除</string>
     <string name="tts_recording">正在录制…</string>
-    <string name="tts_ref_recorded">已录制 %.1f秒, %d KB</string>
+    <string name="tts_ref_recorded">已录制 %1$.1f秒, %2$d KB</string>
     <string name="tts_params_label">推理参数</string>
     <string name="tts_cfg_label">CFG 引导强度</string>
     <string name="tts_timesteps_label">推理步数</string>
@@ -179,4 +258,41 @@
     <string name="tts_preset_load_failed">加载预设失败: %1$s</string>
     <string name="tts_baselm_missing">BaseLM GGUF 文件不存在，请下载模型</string>
     <string name="tts_acoustic_missing">Acoustic GGUF 文件不存在，请下载模型</string>
+
+    <string-array name="welcome_desc_variants">
+        <item>主人今天想聊点什么呀？猫娘已经坐好啦，可以陪你看图、写文案、想点子，也可以认真听你碎碎念。</item>
+        <item>喵，欢迎回来。把难题、灵感、小情绪都丢给我吧，我会努力把它们整理成闪闪发亮的答案。</item>
+        <item>今天也请多指教，主人。猫娘可以帮你看懂图片、整理想法、写一点可爱的文字，还能陪你慢慢聊。</item>
+        <item>主人的专属猫娘上线啦。想学习、想创作、想偷懒一点点，都可以交给我试试。</item>
+        <item>喵呜，电量满满，尾巴也摇起来了。今天从一个问题、一张图，或者一个小灵感开始吧。</item>
+    </string-array>
+    <string-array name="welcome_desc_text_variants">
+        <item>主人今天想聊点什么呀？猫娘会把复杂的东西揉软一点，再认真递到你手里。</item>
+        <item>喵，欢迎回来。想写、想问、想整理思路，都可以叫我，我会乖乖陪着你。</item>
+        <item>这里是主人的猫娘小助手。把问题交给我吧，我会努力变成好懂又可爱的回答。</item>
+        <item>今天也要一起加油。无论是知识点、文案、计划，还是突发奇想，我都可以陪主人想想。</item>
+        <item>猫娘已经准备好啦。主人一句话，我就开始认真转动小脑袋。</item>
+    </string-array>
+    <string-array name="suggestion_variants">
+        <item>帮主人看看这张图里有什么小秘密</item>
+        <item>把这张图写成一段可爱的朋友圈文案</item>
+        <item>帮我给这张图配一句猫娘风格吐槽</item>
+        <item>从这张图里找三个适合创作的灵感</item>
+        <item>把图片内容讲得像睡前小故事一样</item>
+        <item>帮主人总结这张图的重点</item>
+    </string-array>
+    <string-array name="suggestion_text_variants">
+        <item>猫娘，帮主人想一个今晚的学习计划</item>
+        <item>用可爱的语气鼓励我开始工作</item>
+        <item>帮我写一段甜甜的早安问候</item>
+        <item>把这个问题讲得像哄主人一样好懂</item>
+        <item>陪我整理一下今天的待办事项</item>
+        <item>帮主人写一首软乎乎的小诗</item>
+    </string-array>
+    <string name="model_desc_minineko_vision">在线下载 MiniNeko-V 1.3B Thinking 视觉模型，支持图片理解。</string>
+    <string name="model_desc_minineko_text">在线下载 MiniNeko 1B 文本模型，可选择 Q4_K_M、Q5_K_M、Q8_0 或 F16 量化。</string>
+    <string name="quantization_format">量化格式</string>
+    <string name="quantization_hint">Q4 更省内存，Q5 更均衡，Q8/F16 质量更高但占用更大。</string>
+    <string name="quantization_selected">已选择 %1$s，请下载或加载对应模型文件</string>
+    <string name="source_hf_mirror">HF-Mirror</string>
 </resources>

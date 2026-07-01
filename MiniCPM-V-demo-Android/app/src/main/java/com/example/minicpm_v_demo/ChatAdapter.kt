@@ -115,18 +115,34 @@ class ChatAdapter(
 
         fun bind(item: ChatMessage.WelcomeCard) {
             val ctx = itemView.context
+            val descArrayRes = if (item.isTextOnly) {
+                R.array.welcome_desc_text_variants
+            } else {
+                R.array.welcome_desc_variants
+            }
+            val suggestionsArrayRes = if (item.isTextOnly) {
+                R.array.suggestion_text_variants
+            } else {
+                R.array.suggestion_variants
+            }
+            val descArray = ctx.resources.getStringArray(descArrayRes)
+            val suggestions = ctx.resources.getStringArray(suggestionsArrayRes)
+            val desc = descArray[item.variant % descArray.size]
+            val firstSuggestion = suggestions[(item.variant * 2) % suggestions.size]
+            val secondSuggestion = suggestions[(item.variant * 2 + 1) % suggestions.size]
+
             if (item.isTextOnly) {
                 tvWelcomeTitle.setText(R.string.welcome_title_text)
-                tvWelcomeDesc.setText(R.string.welcome_desc_text)
-                btnSuggestion1.setText(R.string.suggestion_1_text)
-                btnSuggestion2.setText(R.string.suggestion_2_text)
+                tvWelcomeDesc.text = desc
+                btnSuggestion1.text = firstSuggestion
+                btnSuggestion2.text = secondSuggestion
                 btnSuggestion1.setIconResource(R.drawable.ic_lightbulb)
                 btnSuggestion2.setIconResource(R.drawable.ic_lightbulb)
             } else {
                 tvWelcomeTitle.setText(R.string.welcome_title)
-                tvWelcomeDesc.setText(R.string.welcome_desc)
-                btnSuggestion1.setText(R.string.suggestion_1)
-                btnSuggestion2.setText(R.string.suggestion_2)
+                tvWelcomeDesc.text = desc
+                btnSuggestion1.text = firstSuggestion
+                btnSuggestion2.text = secondSuggestion
                 btnSuggestion1.setIconResource(R.drawable.ic_lightbulb)
                 btnSuggestion2.setIconResource(R.drawable.ic_image)
             }
@@ -138,6 +154,7 @@ class ChatAdapter(
     }
 
     inner class UserMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val ivAvatar: ImageView = itemView.findViewById(R.id.iv_user_avatar)
         private val tvText: TextView = itemView.findViewById(R.id.tv_user_text)
         private val flImageContainer: View = itemView.findViewById(R.id.fl_user_image_container)
         private val ivImage: ImageView = itemView.findViewById(R.id.iv_user_image)
@@ -146,6 +163,7 @@ class ChatAdapter(
         private val progressImage: LinearProgressIndicator = itemView.findViewById(R.id.progress_image)
 
         fun bind(item: ChatMessage.UserMessage) {
+            AvatarStore.applyAvatar(itemView.context, ivAvatar, AvatarStore.AvatarKind.User)
             tvText.text = item.text
             tvText.visibility = if (item.text.isNotBlank()) View.VISIBLE else View.GONE
 
@@ -166,6 +184,7 @@ class ChatAdapter(
     }
 
     inner class AiMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val ivAvatar: ImageView = itemView.findViewById(R.id.iv_ai_avatar)
         private val tvText: TextView = itemView.findViewById(R.id.tv_ai_text)
         private val btnStop: MaterialButton = itemView.findViewById(R.id.btn_stop_generating)
         private val layoutThinking: View = itemView.findViewById(R.id.layout_thinking)
@@ -179,6 +198,7 @@ class ChatAdapter(
         private var streamingMinWidth = 0
 
         fun bind(item: ChatMessage.AiMessage) {
+            AvatarStore.applyAvatar(itemView.context, ivAvatar, AvatarStore.AvatarKind.Catgirl)
             if (!item.isGenerating) {
                 streamingMinWidth = 0
                 (tvText.parent as? ViewGroup)?.minimumWidth = 0
@@ -216,7 +236,7 @@ class ChatAdapter(
                     tvThinkingLabel.text = itemView.context.getString(R.string.thinking_process)
                 }
 
-                tvThinkingArrow.text = if (thinkingExpanded) "▾" else "▸"
+                tvThinkingArrow.text = if (thinkingExpanded) "v" else ">"
                 tvThinkingText.visibility = if (thinkingExpanded) View.VISIBLE else View.GONE
                 dividerThinking.visibility = if (!parsed.isThinking) View.VISIBLE else View.GONE
 
@@ -225,7 +245,7 @@ class ChatAdapter(
 
                 layoutThinkingHeader.setOnClickListener {
                     thinkingExpanded = !thinkingExpanded
-                    tvThinkingArrow.text = if (thinkingExpanded) "▾" else "▸"
+                    tvThinkingArrow.text = if (thinkingExpanded) "v" else ">"
                     tvThinkingText.visibility = if (thinkingExpanded) View.VISIBLE else View.GONE
                 }
             } else {
@@ -287,9 +307,10 @@ class ChatAdapter(
                             oldItem.isVideo == newItem.isVideo
                 oldItem is ChatMessage.AiMessage && newItem is ChatMessage.AiMessage ->
                     oldItem.isGenerating == newItem.isGenerating &&
-                            (oldItem.isGenerating || oldItem.text == newItem.text)
+                            oldItem.text == newItem.text
                 oldItem is ChatMessage.WelcomeCard && newItem is ChatMessage.WelcomeCard ->
-                    oldItem.isTextOnly == newItem.isTextOnly
+                    oldItem.isTextOnly == newItem.isTextOnly &&
+                            oldItem.variant == newItem.variant
                 else -> false
             }
         }

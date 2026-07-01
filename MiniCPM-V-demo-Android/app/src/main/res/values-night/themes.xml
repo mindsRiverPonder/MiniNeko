@@ -8,14 +8,14 @@
         <item name="colorOnSecondary">@color/on_secondary</item>
         <item name="colorSecondaryContainer">@color/secondary_container</item>
         <item name="colorOnSecondaryContainer">@color/on_secondary_container</item>
-        <item name="colorSurface">#FF1C1B1F</item>
-        <item name="colorOnSurface">#FFE6E1E5</item>
-        <item name="colorSurfaceVariant">#FF49454F</item>
-        <item name="colorOnSurfaceVariant">#FFCAC4D0</item>
+        <item name="colorSurface">#FF24141B</item>
+        <item name="colorOnSurface">#FFFFEAF2</item>
+        <item name="colorSurfaceVariant">#FF3B202C</item>
+        <item name="colorOnSurfaceVariant">#FFFFD8E6</item>
         <item name="colorOutline">@color/outline</item>
-        <item name="android:statusBarColor">#FF1C1B1F</item>
+        <item name="android:statusBarColor">#FF24141B</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:navigationBarColor">#FF1C1B1F</item>
+        <item name="android:navigationBarColor">#FF24141B</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
     </style>
 </resources>
